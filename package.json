@@ -1,10 +1,10 @@
 {
   "name": "miden-vscode-extension",
   "displayName": "Miden",
-  "description": "VS Code support for Miden Assembly via miden-lsp.",
+  "description": "VS Code support for Miden Assembly: miden-lsp language server and DAP-based debugger for MASM transaction scripts.",
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
-  "private": true,
+  "publisher": "miden",
   "repository": {
     "type": "git",
     "url": "https://github.com/0xpolygonmiden/miden-lsp"
@@ -13,18 +13,22 @@
     "vscode": "^1.97.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers"
   ],
   "keywords": [
     "miden",
     "masm",
     "lsp",
-    "language-server"
+    "language-server",
+    "debugger",
+    "dap"
   ],
   "activationEvents": [
     "onLanguage:masm",
     "workspaceContains:miden-project.toml",
-    "onCommand:miden-lsp.restartServer"
+    "onCommand:miden-lsp.restartServer",
+    "onDebugResolve:miden"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -94,6 +98,117 @@
           "markdownDescription": "Trace level for `miden-lsp` protocol logging in the output panel."
         }
       }
+    },
+    "breakpoints": [
+      {
+        "language": "masm"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "miden",
+        "label": "Miden Debug",
+        "languages": [
+          "masm"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "required": [],
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Host of the running DAP server.",
+                "default": "127.0.0.1"
+              },
+              "port": {
+                "type": "number",
+                "description": "Port of the running DAP server.",
+                "default": 4711
+              }
+            }
+          },
+          "launch": {
+            "required": [
+              "scriptPath"
+            ],
+            "properties": {
+              "scriptPath": {
+                "type": "string",
+                "description": "Path to the .masm script to debug.",
+                "default": "${file}"
+              },
+              "midenClientPath": {
+                "type": "string",
+                "description": "Path to the miden-client binary.",
+                "default": "miden-client"
+              },
+              "accountId": {
+                "type": "string",
+                "description": "Account ID to use for execution (optional)."
+              },
+              "host": {
+                "type": "string",
+                "description": "Host for the DAP server.",
+                "default": "127.0.0.1"
+              },
+              "port": {
+                "type": "number",
+                "description": "Port for the DAP server.",
+                "default": 4711
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for miden-client (must be an initialized client directory).",
+                "default": "${workspaceFolder}"
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "Miden: Attach to DAP Server",
+            "description": "Connect to a running miden-client DAP server.",
+            "body": {
+              "type": "miden",
+              "request": "attach",
+              "name": "Attach to Miden DAP",
+              "host": "127.0.0.1",
+              "port": 4711
+            }
+          },
+          {
+            "label": "Miden: Launch Script",
+            "description": "Launch miden-client and debug a .masm script.",
+            "body": {
+              "type": "miden",
+              "request": "launch",
+              "name": "Debug Miden Script",
+              "scriptPath": "^\"\\${file}\"",
+              "midenClientPath": "miden-client",
+              "host": "127.0.0.1",
+              "port": 4711
+            }
+          }
+        ]
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "miden-inspector",
+          "title": "Miden Inspector",
+          "icon": "$(debug)"
+        }
+      ]
+    },
+    "views": {
+      "miden-inspector": [
+        {
+          "id": "midenState",
+          "name": "Miden State",
+          "when": "inDebugMode"
+        }
+      ]
     }
   },
   "scripts": {
