@@ -1,7 +1,7 @@
 {
   "name": "miden-vscode-extension",
   "displayName": "Miden",
-  "description": "VS Code support for Miden Assembly: miden-lsp language server and DAP-based debugger for MASM transaction scripts.",
+  "description": "VS Code support for Miden Assembly: miden-lsp language server and DAP-based debugger for transactions and standalone programs.",
   "version": "0.1.0",
   "license": "MIT OR Apache-2.0",
   "publisher": "miden",
@@ -56,8 +56,22 @@
       {
         "command": "miden-lsp.restartServer",
         "title": "Miden: Restart Language Server"
+      },
+      {
+        "command": "miden-debug.nextLine",
+        "title": "Miden: Next Line",
+        "icon": "$(debug-step-over)"
       }
     ],
+    "menus": {
+      "debug/toolBar": [
+        {
+          "command": "miden-debug.nextLine",
+          "when": "inDebugMode && debugType == miden",
+          "group": "navigation@4"
+        }
+      ]
+    },
     "configuration": {
       "title": "Miden LSP",
       "properties": {
@@ -102,6 +116,9 @@
     "breakpoints": [
       {
         "language": "masm"
+      },
+      {
+        "language": "rust"
       }
     ],
     "debuggers": [
@@ -128,13 +145,25 @@
             }
           },
           "launch": {
-            "required": [
-              "scriptPath"
-            ],
+            "required": [],
             "properties": {
+              "runtime": {
+                "type": "string",
+                "enum": [
+                  "client",
+                  "debugger"
+                ],
+                "description": "Launch backend. Use 'client' for miden-client transaction debugging, or 'debugger' for standalone miden-debug sessions.",
+                "default": "client"
+              },
               "scriptPath": {
                 "type": "string",
-                "description": "Path to the .masm script to debug.",
+                "description": "Path to the .masm transaction script to debug with miden-client.",
+                "default": "${file}"
+              },
+              "programPath": {
+                "type": "string",
+                "description": "Path to a standalone .masm source file or compiled .masp package to debug with miden-debug.",
                 "default": "${file}"
               },
               "midenClientPath": {
@@ -142,9 +171,74 @@
                 "description": "Path to the miden-client binary.",
                 "default": "miden-client"
               },
+              "midenDebugPath": {
+                "type": "string",
+                "description": "Path to the miden-debug binary.",
+                "default": "miden-debug"
+              },
               "accountId": {
                 "type": "string",
-                "description": "Account ID to use for execution (optional)."
+                "description": "Account ID to use for miden-client transaction execution (optional)."
+              },
+              "inputsPath": {
+                "type": "string",
+                "description": "Path to a miden-debug inputs TOML file for standalone debugger launches."
+              },
+              "entrypoint": {
+                "type": "string",
+                "description": "Entrypoint to call when programPath points at a library package."
+              },
+              "programArgs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Operand stack arguments for standalone debugger launches.",
+                "default": []
+              },
+              "sysroot": {
+                "type": "string",
+                "description": "Miden sysroot for standalone debugger launches."
+              },
+              "searchPath": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Additional library search paths for standalone debugger launches.",
+                "default": []
+              },
+              "linkLibraries": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Libraries to pass to miden-debug with --link-library.",
+                "default": []
+              },
+              "sourcePathPrefixes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Explicit source path prefixes used to map paths produced by the compiler's -Ztrim-path-prefix option.",
+                "default": []
+              },
+              "trimPathPrefixes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Compiler -Ztrim-path-prefix values. The extension forwards these as source path prefixes to miden-debug.",
+                "default": []
+              },
+              "compilerArgs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Compiler arguments to scan for -Ztrim-path-prefix values when launching miden-debug.",
+                "default": []
               },
               "host": {
                 "type": "string",
@@ -158,7 +252,7 @@
               },
               "cwd": {
                 "type": "string",
-                "description": "Working directory for miden-client (must be an initialized client directory).",
+                "description": "Working directory for the launched debug backend.",
                 "default": "${workspaceFolder}"
               }
             }
@@ -178,13 +272,28 @@
           },
           {
             "label": "Miden: Launch Script",
-            "description": "Launch miden-client and debug a .masm script.",
+            "description": "Launch miden-client and debug a transaction .masm script.",
             "body": {
               "type": "miden",
               "request": "launch",
-              "name": "Debug Miden Script",
+              "name": "Debug Miden Transaction Script",
+              "runtime": "client",
               "scriptPath": "^\"\\${file}\"",
               "midenClientPath": "miden-client",
+              "host": "127.0.0.1",
+              "port": 4711
+            }
+          },
+          {
+            "label": "Miden: Launch Standalone Program",
+            "description": "Launch miden-debug and debug a standalone .masm or .masp program.",
+            "body": {
+              "type": "miden",
+              "request": "launch",
+              "name": "Debug Miden Program",
+              "runtime": "debugger",
+              "programPath": "^\"\\${file}\"",
+              "midenDebugPath": "miden-debug",
               "host": "127.0.0.1",
               "port": 4711
             }
