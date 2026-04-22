@@ -37,6 +37,21 @@ VS Code extension for Miden Assembly. Bundles:
 The extension contributes a `miden` debug type that speaks DAP to a TCP server
 exposed by `miden-client`. Two launch modes are supported.
 
+### Backend prerequisites
+
+Until the upstream crates release the fixes this extension depends on, debug
+sessions need `miden-client` built from the companion feature branches:
+
+| Repo | Branch | Fix |
+| ---- | ------ | --- |
+| [walnuthq/miden-client](https://github.com/walnuthq/miden-client/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | `compile_tx_script` takes the script path so DAP clients receive real `Source.path` + line numbers for user code. |
+| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
+
+The `miden-client` branch already carries a `[patch.crates-io]` entry that
+pins `miden-debug` to the matching branch, so a plain
+`cargo build --bin miden-client --features testing` is enough. Remove or
+update the patch once both fixes ship in a published `miden-debug` release.
+
 ### Attach mode
 
 Start the DAP server yourself, then attach from VS Code:
