@@ -5,6 +5,7 @@ import {
   ServerOptions,
   Trace,
 } from "vscode-languageclient/node";
+import { activateDebug } from "./debug/activate";
 
 const CONFIG_SECTION = "miden-lsp";
 const SERVER_COMMAND = "miden-lsp";
@@ -18,6 +19,10 @@ let restartInFlight: Promise<void> | undefined;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel("Miden LSP");
   context.subscriptions.push(outputChannel);
+
+  // Register debug providers first so debugging works even if miden-lsp
+  // is not installed or fails to start.
+  activateDebug(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand("miden-lsp.restartServer", async () => {
@@ -41,7 +46,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  await startClient();
+  try {
+    await startClient();
+  } catch {
+    // Error already surfaced via showErrorMessage + output channel.
+    // Swallow so extension activation succeeds and the DAP providers
+    // registered above remain usable.
+  }
 }
 
 export async function deactivate(): Promise<void> {
