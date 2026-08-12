@@ -7,7 +7,7 @@
   "publisher": "miden",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0xpolygonmiden/miden-lsp"
+    "url": "https://github.com/0xMiden/vscode-extension.git"
   },
   "engines": {
     "vscode": "^1.97.0"
