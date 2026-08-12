@@ -43,33 +43,17 @@ programs.
 
 Until the upstream crates release the fixes this extension depends on,
 transaction debug sessions need `miden-client` built from the companion feature
-branches. Standalone sessions need `miden-debug` from the matching debugger
-branch.
+branch. Standalone sessions need a released `miden-debug` with VS Code DAP
+attach support.
 
 | Repo | Branch | Fix |
 | ---- | ------ | --- |
 | [walnuthq/miden-client](https://github.com/walnuthq/miden-client/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | `compile_tx_script` takes the script path so DAP clients receive real `Source.path` + line numbers for user code. |
-| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
+| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/releases) | `miden-debug` v0.8.0 or newer | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
 
-The `miden-client` branch already carries a `[patch.crates-io]` entry that
-pins `miden-debug` to the matching branch, so a plain
-`cargo build --bin miden-client --features testing` is enough. Remove or
-update the patch once both fixes ship in a published `miden-debug` release.
-
-### Backend prerequisites
-
-Until the upstream crates release the fixes this extension depends on, debug
-sessions need `miden-client` built from the companion feature branches:
-
-| Repo | Branch | Fix |
-| ---- | ------ | --- |
-| [walnuthq/miden-client](https://github.com/walnuthq/miden-client/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | `compile_tx_script` takes the script path so DAP clients receive real `Source.path` + line numbers for user code. |
-| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
-
-The `miden-client` branch already carries a `[patch.crates-io]` entry that
-pins `miden-debug` to the matching branch, so a plain
-`cargo build --bin miden-client --features testing` is enough. Remove or
-update the patch once both fixes ship in a published `miden-debug` release.
+When building the `miden-client` backend from the companion branch, follow that
+branch's Cargo configuration for its debugger dependency. Once the client-side
+fix ships upstream, this section can be simplified.
 
 ### Attach mode
 
