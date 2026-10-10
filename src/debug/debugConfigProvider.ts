@@ -8,8 +8,8 @@ import * as path from "path";
  *
  * - **attach**: validates host/port, user must start the DAP server manually.
  * - **launch**: spawns either `miden-client exec --start-debug-adapter`
- *   for transaction scripts or `miden-debug --start-debug-adapter` for
- *   standalone programs, then waits for the adapter readiness message.
+ *   for transaction packages or `miden-debug --start-debug-adapter` for
+ *   standalone packages, then waits for the adapter readiness message.
  */
 export class MidenDebugConfigProvider
   implements vscode.DebugConfigurationProvider, vscode.Disposable
@@ -22,7 +22,7 @@ export class MidenDebugConfigProvider
   }
 
   async resolveDebugConfiguration(
-    folder: vscode.WorkspaceFolder | undefined,
+    _folder: vscode.WorkspaceFolder | undefined,
     config: vscode.DebugConfiguration,
     _token?: vscode.CancellationToken,
   ): Promise<vscode.DebugConfiguration | undefined> {
@@ -33,9 +33,25 @@ export class MidenDebugConfigProvider
       config.name = "Attach to Miden DAP";
     }
 
-    config.host = config.host || "127.0.0.1";
-    config.port = config.port || 4711;
+    config.host = config.host ?? "127.0.0.1";
+    config.port = config.port ?? 4711;
 
+    if (
+      typeof config.host !== "string" || config.host.length === 0 ||
+      !Number.isInteger(config.port) || config.port < 1 || config.port > 65535
+    ) {
+      vscode.window.showErrorMessage("Miden Debug: specify a host and a port from 1 to 65535.");
+      return undefined;
+    }
+
+    return config;
+  }
+
+  async resolveDebugConfigurationWithSubstitutedVariables(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration,
+    _token?: vscode.CancellationToken,
+  ): Promise<vscode.DebugConfiguration | undefined> {
     if (config.request === "launch") {
       return this.handleLaunch(config, folder);
     }
@@ -47,10 +63,6 @@ export class MidenDebugConfigProvider
     config: vscode.DebugConfiguration,
     folder: vscode.WorkspaceFolder | undefined,
   ): Promise<vscode.DebugConfiguration | undefined> {
-    if (!(await this.prepareLaunchPort(config))) {
-      return undefined;
-    }
-
     const runtime = this.resolveRuntime(config);
     if (runtime === "debugger") {
       return this.handleDebuggerLaunch(config, folder);
@@ -108,11 +120,11 @@ export class MidenDebugConfigProvider
     if (config.runtime === "debugger" || config.runtime === "miden-debug") {
       return "debugger";
     }
-    if (config.programPath) {
-      return "debugger";
-    }
     if (config.runtime === "client" || config.runtime === "miden-client") {
       return "client";
+    }
+    if (config.programPath) {
+      return "debugger";
     }
     return "client";
   }
@@ -121,22 +133,28 @@ export class MidenDebugConfigProvider
     config: vscode.DebugConfiguration,
     folder: vscode.WorkspaceFolder | undefined,
   ): Promise<vscode.DebugConfiguration | undefined> {
-    const scriptPath = this.resolveString(config.scriptPath, folder);
-    if (!scriptPath) {
+    const packagePath = this.resolveString(config.packagePath ?? config.scriptPath, folder);
+    if (!packagePath) {
       vscode.window.showErrorMessage(
-        "Miden Debug: 'scriptPath' is required for launch mode.",
+        "Miden Debug: 'packagePath' is required for transaction launch mode.",
       );
+      return undefined;
+    }
+    if (!this.validatePackage(packagePath, true)) {
+      return undefined;
+    }
+    if (!(await this.prepareLaunchPort(config))) {
       return undefined;
     }
 
     const midenClient = this.resolveString(config.midenClientPath, folder) || "miden-client";
-    const addr = `${config.host}:${config.port}`;
+    const addr = this.adapterAddress(config);
     const cwd = this.resolveString(config.cwd, folder) || folder?.uri.fsPath || process.cwd();
 
     const args = [
       "exec",
-      "--script-path",
-      scriptPath,
+      "--package",
+      packagePath,
       "--start-debug-adapter",
       addr,
     ];
@@ -144,6 +162,8 @@ export class MidenDebugConfigProvider
     if (config.accountId) {
       args.push("--account", config.accountId);
     }
+    this.pushOptionalArg(args, "--inputs-path", this.resolveString(config.inputsPath, folder));
+    this.pushOptionalArg(args, "--record", this.resolveString(config.recordPath, folder));
 
     return this.startAdapterProcess(
       config,
@@ -151,7 +171,7 @@ export class MidenDebugConfigProvider
       midenClient,
       args,
       cwd,
-      `Make sure the working directory is an initialized miden-client directory.`,
+      `Use a client built with the 'dap' feature and an initialized client directory with an account.`,
     );
   }
 
@@ -159,16 +179,22 @@ export class MidenDebugConfigProvider
     config: vscode.DebugConfiguration,
     folder: vscode.WorkspaceFolder | undefined,
   ): Promise<vscode.DebugConfiguration | undefined> {
-    const programPath = this.resolveString(config.programPath || config.scriptPath, folder);
+    const programPath = this.resolveString(config.programPath, folder);
     if (!programPath) {
       vscode.window.showErrorMessage(
         "Miden Debug: 'programPath' is required for debugger launch mode.",
       );
       return undefined;
     }
+    if (!this.validatePackage(programPath, false)) {
+      return undefined;
+    }
+    if (!(await this.prepareLaunchPort(config))) {
+      return undefined;
+    }
 
     const midenDebug = this.resolveString(config.midenDebugPath, folder) || "miden-debug";
-    const addr = `${config.host}:${config.port}`;
+    const addr = this.adapterAddress(config);
     const cwd = this.resolveString(config.cwd, folder) || folder?.uri.fsPath || process.cwd();
     const sourcePathPrefixes = this.resolveSourcePathPrefixes(
       config,
@@ -206,7 +232,7 @@ export class MidenDebugConfigProvider
       midenDebug,
       args,
       cwd,
-      `Make sure 'programPath' points at a .masm source file or compiled .masp package.`,
+      `Use a compiled .masp package built with a compatible toolchain and debug information.`,
     );
   }
 
@@ -218,7 +244,7 @@ export class MidenDebugConfigProvider
     cwd: string,
     notReadyHint: string,
   ): Promise<vscode.DebugConfiguration | undefined> {
-    const addr = `${config.host}:${config.port}`;
+    const addr = this.adapterAddress(config);
     this.outputChannel.appendLine(
       `Launching: ${command} ${args.join(" ")}`,
     );
@@ -229,29 +255,43 @@ export class MidenDebugConfigProvider
 
     let readyOutputSeen = false;
     let startError: Error | undefined;
-    this.serverProcess = spawn(command, args, {
+    const serverProcess = spawn(command, args, {
       cwd,
+      env: {
+        ...process.env,
+        MIDENC_TRACE: [process.env.MIDENC_TRACE, "miden_debug_engine::exec::dap=info"]
+          .filter(Boolean).join(","),
+        RUST_LOG: [process.env.RUST_LOG, "miden_debug_engine::exec::dap=info"]
+          .filter(Boolean).join(","),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    this.serverProcess = serverProcess;
 
-    this.serverProcess.stdout?.on("data", (data: Buffer) => {
+    let stdoutTail = "";
+    let stderrTail = "";
+    serverProcess.stdout?.on("data", (data: Buffer) => {
       const text = data.toString();
-      readyOutputSeen ||= this.isReadyOutput(text);
+      stdoutTail = (stdoutTail + text).slice(-4096);
+      readyOutputSeen ||= this.isReadyOutput(stdoutTail);
       this.outputChannel.append(text);
     });
 
-    this.serverProcess.stderr?.on("data", (data: Buffer) => {
+    serverProcess.stderr?.on("data", (data: Buffer) => {
       const text = data.toString();
-      readyOutputSeen ||= this.isReadyOutput(text);
+      stderrTail = (stderrTail + text).slice(-4096);
+      readyOutputSeen ||= this.isReadyOutput(stderrTail);
       this.outputChannel.append(text);
     });
 
-    this.serverProcess.on("exit", (code) => {
+    serverProcess.on("exit", (code) => {
       this.outputChannel.appendLine(`${processName} exited with code ${code}`);
-      this.serverProcess = undefined;
+      if (this.serverProcess === serverProcess) {
+        this.serverProcess = undefined;
+      }
     });
 
-    this.serverProcess.on("error", (err: Error) => {
+    serverProcess.on("error", (err: Error) => {
       startError = err;
       this.outputChannel.appendLine(`${processName} failed to start: ${err.message}`);
     });
@@ -334,8 +374,8 @@ export class MidenDebugConfigProvider
         }
       };
 
-      const onData = (data: Buffer) => {
-        if (this.isReadyOutput(data.toString())) {
+      const onData = () => {
+        if (isAlreadyReady()) {
           finish();
         }
       };
@@ -379,6 +419,23 @@ export class MidenDebugConfigProvider
     if (typeof value === "string" && value.length > 0) {
       args.push(flag, value);
     }
+  }
+
+  private adapterAddress(config: vscode.DebugConfiguration): string {
+    const host = config.host.includes(":") ? `[${config.host}]` : config.host;
+    return `${host}:${config.port}`;
+  }
+
+  private validatePackage(value: string, allowName: boolean): boolean {
+    const extension = path.extname(value).toLowerCase();
+    if (extension === ".masp" || (allowName && !extension && !/[\\/]/.test(value))) {
+      return true;
+    }
+    vscode.window.showErrorMessage(
+      "Miden Debug: sources are not accepted. Build a .masp package first with 'miden build' " +
+        "or 'midenc --debug full'. Transaction launches also accept bare package names.",
+    );
+    return false;
   }
 
   private resolveString(

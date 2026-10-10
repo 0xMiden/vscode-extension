@@ -4,6 +4,7 @@ export interface DapUiFrame {
   source_path: string | null;
   line: number;
   column: number;
+  inline?: boolean;
 }
 
 /**
