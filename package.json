@@ -126,7 +126,8 @@
         "type": "miden",
         "label": "Miden Debug",
         "languages": [
-          "masm"
+          "masm",
+          "rust"
         ],
         "configurationAttributes": {
           "attach": {
@@ -138,7 +139,9 @@
                 "default": "127.0.0.1"
               },
               "port": {
-                "type": "number",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
                 "description": "Port of the running DAP server.",
                 "default": 4711
               }
@@ -156,15 +159,18 @@
                 "description": "Launch backend. Use 'client' for miden-client transaction debugging, or 'debugger' for standalone miden-debug sessions.",
                 "default": "client"
               },
+              "packagePath": {
+                "type": "string",
+                "description": "Compiled transaction script .masp package path or bare name from the client's packages directory."
+              },
               "scriptPath": {
                 "type": "string",
-                "description": "Path to the .masm transaction script to debug with miden-client.",
-                "default": "${file}"
+                "description": "Deprecated alias for packagePath. Only compiled packages are accepted.",
+                "deprecationMessage": "Use packagePath with a compiled .masp transaction script package, not a MASM source file."
               },
               "programPath": {
                 "type": "string",
-                "description": "Path to a standalone .masm source file or compiled .masp package to debug with miden-debug.",
-                "default": "${file}"
+                "description": "Path to a compiled .masp program package to debug with miden-debug. Build it first with a compatible toolchain."
               },
               "midenClientPath": {
                 "type": "string",
@@ -182,7 +188,11 @@
               },
               "inputsPath": {
                 "type": "string",
-                "description": "Path to a miden-debug inputs TOML file for standalone debugger launches."
+                "description": "Inputs TOML path: --inputs for the debugger or --inputs-path (advice-map entries) for the client."
+              },
+              "recordPath": {
+                "type": "string",
+                "description": "Client-only replay snapshot output path. Snapshots may contain sensitive account, note, and witness data."
               },
               "entrypoint": {
                 "type": "string",
@@ -193,7 +203,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "Operand stack arguments for standalone debugger launches.",
+                "description": "Standalone entrypoint arguments. Typed signatures use canonical ABI encoding; otherwise arguments are raw felts.",
                 "default": []
               },
               "sysroot": {
@@ -246,7 +256,9 @@
                 "default": "127.0.0.1"
               },
               "port": {
-                "type": "number",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
                 "description": "Port for the DAP server.",
                 "default": 4711
               },
@@ -271,14 +283,14 @@
             }
           },
           {
-            "label": "Miden: Launch Script",
-            "description": "Launch miden-client and debug a transaction .masm script.",
+            "label": "Miden: Launch Transaction Package",
+            "description": "Launch a DAP-enabled miden-client and debug a compiled transaction script package.",
             "body": {
               "type": "miden",
               "request": "launch",
-              "name": "Debug Miden Transaction Script",
+              "name": "Debug Miden Transaction Package",
               "runtime": "client",
-              "scriptPath": "^\"\\${file}\"",
+              "packagePath": "^\"\\${workspaceFolder}/target/miden/dev/my-package.masp\"",
               "midenClientPath": "miden-client",
               "host": "127.0.0.1",
               "port": 4711
@@ -286,13 +298,13 @@
           },
           {
             "label": "Miden: Launch Standalone Program",
-            "description": "Launch miden-debug and debug a standalone .masm or .masp program.",
+            "description": "Launch miden-debug and debug a compiled .masp program.",
             "body": {
               "type": "miden",
               "request": "launch",
               "name": "Debug Miden Program",
               "runtime": "debugger",
-              "programPath": "^\"\\${file}\"",
+              "programPath": "^\"\\${workspaceFolder}/target/miden/dev/my-package.masp\"",
               "midenDebugPath": "miden-debug",
               "host": "127.0.0.1",
               "port": 4711
