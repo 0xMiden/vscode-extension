@@ -125,7 +125,11 @@ export class MidenStateProvider
         const location = frame.source_path
           ? `${frame.source_path}:${frame.line}`
           : "";
-        return new MidenTreeItem(frame.name, location, "frame");
+        return new MidenTreeItem(
+          frame.inline ? `[inlined] ${frame.name}` : frame.name,
+          location,
+          "frame",
+        );
       });
     }
 

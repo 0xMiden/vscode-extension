@@ -1,217 +1,156 @@
-# Miden Extension for VSCode
+# Miden Extension for VS Code
 
-VS Code extension for Miden Assembly. Bundles:
+Language support for Miden Assembly through `miden-lsp`, and DAP debugging for
+compiled Rust/MASM packages through `miden-debug` or `miden-client`.
 
-- **Language support** via `miden-lsp` (semantic tokens, completions, diagnostics).
-- **Debugger** (DAP client) that connects to the Miden VM debug adapter served
-  by `miden-client exec --start-debug-adapter` or standalone `miden-debug`.
+## Local development
 
-## Current Assumptions
+1. Run `npm ci` and `npm run compile`.
+2. Open this folder in VS Code and start an Extension Development Host.
 
-- `miden-lsp` is already available via `PATH`, or configured with
-  `miden-lsp.binary.path`
-- rich syntax coloring comes from semantic tokens exposed by `miden-lsp`
-- the bundled TextMate grammar is only a lightweight lexical fallback for the
-  editor before the language server is active
-- direct runtime integration of `tree-sitter-masm` is deferred; the recorded
-  grammar lineage lives in `tree-sitter-masm.lock.json`
+## Language server settings
 
-## Local Development
+The language server must be on `PATH`, or configured through
+`miden-lsp.binary.path`. Other settings are `miden-lsp.binary.args`,
+`miden-lsp.binary.env`, `miden-lsp.initializationOptions`, and
+`miden-lsp.trace.server` (`off`, `messages`, or `verbose`).
 
-1. Run `npm install`.
-2. Run `npm run compile`.
-3. Open this folder in VS Code and start an Extension Development Host.
+Semantic tokens provide rich syntax coloring; the bundled TextMate grammar is a
+fallback before the server starts. Debugging works even without `miden-lsp`.
 
-## Settings
+## Debugger prerequisites
 
-- `miden-lsp.binary.path`: absolute or `PATH`-resolvable command for the server
-- `miden-lsp.binary.args`: extra command-line arguments for the server
-- `miden-lsp.binary.env`: extra environment variables for the server process
-- `miden-lsp.initializationOptions`: JSON object forwarded during LSP
-  initialization
-- `miden-lsp.trace.server`: protocol trace level (`off`, `messages`, or
-  `verbose`)
+Checked against [miden-debug 0.18.0](https://github.com/0xMiden/miden-debug/releases/tag/v0.18.0)
+and [miden-client 0.17.3](https://github.com/0xMiden/rust-sdk/releases/tag/v0.17.3).
+No companion feature branches or dependency patches are required.
 
-## Debugging
+Both backends load **compiled `.masp` packages**, not source files. Build first
+with `miden build`, or use `midenc --debug full` for MASM. The package format must
+match the backend's VM version; old compiler artifacts may need rebuilding with
+a matching toolchain. The extension does not compile programs. You can use VS
+Code's `preLaunchTask` to run your own build task.
 
-The extension contributes a `miden` debug type that speaks DAP to a TCP server.
-It can attach to an existing server, launch `miden-client` for transaction
-scripts, or launch `miden-debug` directly for standalone `.masm` / `.masp`
-programs.
-
-### Backend prerequisites
-
-Until the upstream crates release the fixes this extension depends on,
-transaction debug sessions need `miden-client` built from the companion feature
-branches. Standalone sessions need `miden-debug` from the matching debugger
-branch.
-
-| Repo | Branch | Fix |
-| ---- | ------ | --- |
-| [walnuthq/miden-client](https://github.com/walnuthq/miden-client/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | `compile_tx_script` takes the script path so DAP clients receive real `Source.path` + line numbers for user code. |
-| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
-
-The `miden-client` branch already carries a `[patch.crates-io]` entry that
-pins `miden-debug` to the matching branch, so a plain
-`cargo build --bin miden-client --features testing` is enough. Remove or
-update the patch once both fixes ship in a published `miden-debug` release.
-
-### Backend prerequisites
-
-Until the upstream crates release the fixes this extension depends on, debug
-sessions need `miden-client` built from the companion feature branches:
-
-| Repo | Branch | Fix |
-| ---- | ------ | --- |
-| [walnuthq/miden-client](https://github.com/walnuthq/miden-client/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | `compile_tx_script` takes the script path so DAP clients receive real `Source.path` + line numbers for user code. |
-| [0xMiden/miden-debug](https://github.com/0xMiden/miden-debug/tree/feature/vscode-dap-plugin) | `feature/vscode-dap-plugin` | DAP server handles `Command::Attach` instead of rejecting it with "Unsupported command". |
-
-The `miden-client` branch already carries a `[patch.crates-io]` entry that
-pins `miden-debug` to the matching branch, so a plain
-`cargo build --bin miden-client --features testing` is enough. Remove or
-update the patch once both fixes ship in a published `miden-debug` release.
-
-### Attach mode
-
-Start a DAP server yourself, then attach from VS Code. For a transaction:
+The client needs its optional `dap` feature. The published 0.17.3 CLI binary
+does not include `--start-debug-adapter`. Build it from the release checkout:
 
 ```bash
-miden-client exec \
-  --script-path examples/test_debug.masm \
-  --start-debug-adapter 127.0.0.1:4711
+cargo build --locked -p miden-client-cli --features dap
 ```
 
-For a standalone program:
+Run that command in your `miden-client` checkout. Set `midenClientPath` to the
+resulting `target/debug/miden-client` binary (or the executable under your
+configured Cargo target directory). The `testing` feature is separate and is only
+needed for test helpers such as offline wallet creation. A transaction session
+needs an initialized client directory and an account.
 
-```bash
-miden-debug --start-debug-adapter 127.0.0.1:4711 examples/simple.masm
-```
+## Launch a transaction package
 
-`.vscode/launch.json`:
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "miden",
-      "request": "attach",
-      "name": "Attach to Miden DAP",
-      "host": "127.0.0.1",
-      "port": 4711
-    }
-  ]
-}
-```
-
-### Transaction Launch
-
-VS Code spawns `miden-client` and waits for its DAP server to announce
-readiness:
+Add this to `.vscode/launch.json` under `configurations`:
 
 ```json
 {
   "type": "miden",
   "request": "launch",
-  "name": "Debug Miden Script",
+  "name": "Debug Transaction",
   "runtime": "client",
-  "scriptPath": "${file}",
-  "midenClientPath": "miden-client",
+  "packagePath": "${workspaceFolder}/target/miden/dev/my-package.masp",
+  "midenClientPath": "/path/to/dap-enabled/miden-client",
   "cwd": "${workspaceFolder}",
   "host": "127.0.0.1",
   "port": 4711
 }
 ```
 
-`cwd` must point at an initialized `miden-client` working directory.
+The extension runs `miden-client exec --package ... --start-debug-adapter ...`.
+The package must be a library exporting exactly one transaction script, not a
+standalone executable. `packagePath` can also be a bare name from the client's
+configured packages directory. `accountId` selects an account; otherwise the
+client uses its default account.
 
-### Standalone Launch
+`scriptPath` is a deprecated alias for `packagePath`; it no longer accepts
+`.masm` sources. Restart reloads the package without compiling it. Rebuild after
+editing sources before restarting.
 
-Standalone launch means VS Code bypasses `miden-client` completely. It starts
-`miden-debug` directly and debugs a plain Miden VM program: either a `.masm`
-source file or a compiled `.masp` package.
+In the 0.17.3 client / 0.18.0 debugger smoke test, a source breakpoint in the
+transaction package was rejected at program entry with "No executable Miden
+operation is mapped to this source file." The backend validates against the
+currently active kernel debug info before loading the transaction script's
+debug info. Launch, instruction stepping, execution, and recording are supported.
+A local debugger fix now retains these breakpoints as pending, verifies them when
+the package loads, and reads local source files when the host cannot supply them.
+That fix was tested with this client, but is not included in the stock 0.18.0
+debugger dependency; changing the extension's source path alone does not solve it.
 
-Use this mode for:
+## Launch a standalone package
 
-- simple MASM scripts that do not need a transaction context
-- compiled Rust/Miden compiler examples such as `target/miden/debug/*.masp`
-- quick source-level debugger checks where accounts, notes, transaction
-  kernels, and the client store are not involved
+```json
+{
+  "type": "miden",
+  "request": "launch",
+  "name": "Debug Program",
+  "runtime": "debugger",
+  "programPath": "${workspaceFolder}/target/miden/dev/my-package.masp",
+  "midenDebugPath": "miden-debug",
+  "programArgs": ["10"],
+  "cwd": "${workspaceFolder}",
+  "host": "127.0.0.1",
+  "port": 4711
+}
+```
 
-Do not use standalone launch when you want to debug real transaction execution.
-For that, use `runtime: "client"` so VS Code starts `miden-client exec`.
+This launches `miden-debug --start-debug-adapter ... <programPath> -- <programArgs>`.
+Use an explicit `midenDebugPath` if it is not on `PATH`. The package is already
+built; `programPath` is not the Rust or MASM file currently open in the editor.
 
-VS Code starts roughly this command and then attaches to the DAP server:
+`programArgs` use canonical ABI encoding for typed entrypoints, or raw felts
+otherwise. Use `entrypoint` to select an exported procedure in a library package.
+`sysroot`, `searchPath`, and `linkLibraries` supply the corresponding linker
+options if needed. Inherit `MIDEN_SYSROOT` or select a sysroot matching the package.
+
+## Attach to an existing server
+
+Start either backend yourself:
 
 ```bash
-miden-debug --start-debug-adapter 127.0.0.1:4711 <programPath> -- <programArgs>
+# Transaction: requires a DAP-enabled client and an initialized client directory
+miden-client exec --package test_debug.masp --start-debug-adapter 127.0.0.1:4711
+
+# Standalone: midenup users can invoke the debugger as miden debug
+miden debug --start-debug-adapter 127.0.0.1:4711 program.masp
 ```
+
+Then use:
 
 ```json
 {
   "type": "miden",
-  "request": "launch",
-  "name": "Debug Miden Program",
-  "runtime": "debugger",
-  "programPath": "${file}",
-  "midenDebugPath": "miden-debug",
-  "cwd": "${workspaceFolder}",
+  "request": "attach",
+  "name": "Attach to Miden DAP",
   "host": "127.0.0.1",
   "port": 4711
 }
 ```
 
-`programPath` can point to a standalone `.masm` source file or compiled `.masp`
-package. `programArgs` become the operand stack arguments after `--`.
+## Inputs and source paths
 
-For compiler-generated packages, especially Rust examples, the configuration
-usually needs the same values you would pass to `miden-debug` on the command
-line:
+- `inputsPath` passes `--inputs` to the debugger, or `--inputs-path` to the client.
+  These are different TOML formats: standalone execution inputs versus client
+  advice-map entries.
+- `recordPath` passes `--record` to the client. Replay snapshots may contain
+  private account state, note data, and transaction witnesses; do not commit or
+  share them publicly.
+- `sourcePathPrefixes` forwards explicit path prefixes to the standalone
+  debugger. Use it when package debug info contains trimmed source paths.
+- `trimPathPrefixes` and legacy `compilerArgs` containing `-Ztrim-path-prefix`
+  are also supported. Compiler arguments are only inspected, never executed.
+- For packages below `target/miden/`, the extension also infers the project root
+  as a source path prefix. Nonstandard output locations may need explicit prefixes.
 
-```json
-{
-  "type": "miden",
-  "request": "launch",
-  "name": "Debug Fibonacci Package",
-  "runtime": "debugger",
-  "programPath": "${workspaceFolder}/target/miden/debug/fibonacci.masp",
-  "midenDebugPath": "miden-debug",
-  "sysroot": "${workspaceFolder}/path/to/miden-core-lib/assets",
-  "programArgs": ["10"],
-  "cwd": "${workspaceFolder}"
-}
-```
+Both MASM and Rust source breakpoints are supported. Keep source files matching
+the package available, or use the backend's embedded-source support.
 
-Use `inputsPath`, `entrypoint`, `sysroot`, `searchPath`, and `linkLibraries`
-for the corresponding `miden-debug` CLI options. For compiled packages built
-with `midenc -Ztrim-path-prefix=...`, set `trimPathPrefixes` or
-`compilerArgs`; packages under `target/miden/{debug,release}` infer the package
-root automatically.
-
-### Launch configuration reference
-
-| Property          | Type     | Default        | Mode       | Description                                      |
-| ----------------- | -------- | -------------- | ---------- | ------------------------------------------------ |
-| `runtime`         | string   | `client`       | launch     | `client` for transaction debugging, `debugger` for standalone `miden-debug` |
-| `host`            | string   | `127.0.0.1`    | all        | DAP server host                                  |
-| `port`            | number   | `4711`         | all        | DAP server port                                  |
-| `scriptPath`      | string   | —              | client     | Transaction `.masm` script                       |
-| `programPath`     | string   | —              | debugger   | Standalone `.masm` source or `.masp` package     |
-| `midenClientPath` | string   | `miden-client` | client     | Path to the `miden-client` binary                |
-| `midenDebugPath`  | string   | `miden-debug`  | debugger   | Path to the `miden-debug` binary                 |
-| `accountId`       | string   | —              | client     | Account ID for transaction execution             |
-| `inputsPath`      | string   | —              | debugger   | Path to a miden-debug inputs TOML file           |
-| `programArgs`     | string[] | `[]`           | debugger   | Operand stack arguments                          |
-| `entrypoint`      | string   | —              | debugger   | Entrypoint for library packages                  |
-| `sysroot`         | string   | —              | debugger   | Miden sysroot                                    |
-| `searchPath`      | string[] | `[]`           | debugger   | Extra library search paths                       |
-| `linkLibraries`   | string[] | `[]`           | debugger   | Libraries passed with `--link-library`           |
-| `trimPathPrefixes` | string[] | `[]`          | debugger   | `-Ztrim-path-prefix` values for source mapping   |
-| `compilerArgs`    | string[] | `[]`           | debugger   | Args scanned for `-Ztrim-path-prefix=...`        |
-| `cwd`             | string   | workspace      | launch     | Working directory for the launched backend       |
-
-### Miden Inspector
-
-While a debug session is active, the **Miden Inspector** view in the activity
-bar renders cycle, operand stack, and call stack from the server's custom
-`miden/uiState` DAP event.
+The **Miden Inspector** displays cycle, operand stack, and call stack from
+`miden/uiState`, including inline-frame markers. Standard VS Code panes show
+variables and stack traces. The extension enables the backend's DAP readiness
+log and waits without opening a probe connection (the server accepts a single
+debug client). If the requested launch port is occupied, it chooses a free port.
